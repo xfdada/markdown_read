@@ -58,7 +58,8 @@ from flask import (
 
 # ── Path resolution ────────────────────────────────────────────────────────────
 
-_FROZEN = getattr(sys, "frozen", False)
+# PyInstaller sets sys.frozen; Nuitka sets __compiled__ (a module-level builtin)
+_FROZEN = getattr(sys, "frozen", False) or globals().get("__compiled__", False)
 
 # Directory that holds config.json / document/ (editable by the user)
 if _FROZEN:
@@ -77,7 +78,15 @@ else:
     APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Directory that holds bundled read-only resources (templates/)
-BUNDLE_DIR = getattr(sys, "_MEIPASS", APP_DIR)
+# PyInstaller extracts to sys._MEIPASS; Nuitka keeps resources next to the exe.
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    # PyInstaller onefile mode
+    BUNDLE_DIR = sys._MEIPASS
+elif _FROZEN:
+    # Nuitka: templates/ is copied next to the .exe by --include-data-dir
+    BUNDLE_DIR = os.path.dirname(sys.executable)
+else:
+    BUNDLE_DIR = APP_DIR
 
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
 

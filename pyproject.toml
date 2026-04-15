@@ -13,4 +13,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pyinstaller>=6.19.0",
+    "nuitka>=2.4",
+    "zstandard>=0.23",
+    "ordered-set>=4.1",
 ]

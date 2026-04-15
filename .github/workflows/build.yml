@@ -23,38 +23,47 @@ jobs:
         with:
           python-version: "3.11"
 
-      # ── Install runtime deps + PyInstaller ────────────────────────────────
+      # ── Install runtime deps + Nuitka ─────────────────────────────────────
       - name: Install dependencies
         run: |
-          pip install flask bcrypt markdown Pygments pyinstaller
+          pip install flask bcrypt markdown Pygments nuitka zstandard ordered-set
 
-      # ── Build .exe ────────────────────────────────────────────────────────
-      - name: Build with PyInstaller
+      # ── Build .exe with Nuitka ────────────────────────────────────────────
+      # Nuitka compiles Python → C++ → machine code.
+      # --onefile bundles everything into a single self-extracting exe.
+      # --windows-console-mode=disable suppresses the terminal window.
+      # --include-data-dir copies templates/ next to the extracted exe.
+      # --nofollow-import-to=* + explicit --include-module= keeps size down.
+      - name: Build with Nuitka
         run: >
-          pyinstaller
-          --onefile --noconsole
-          --name=doc-reader
-          "--add-data=templates;templates"
-          --hidden-import=markdown.extensions.extra
-          --hidden-import=markdown.extensions.codehilite
-          --hidden-import=markdown.extensions.toc
-          --hidden-import=markdown.extensions.fenced_code
-          --hidden-import=markdown.extensions.tables
-          --hidden-import=markdown.extensions.footnotes
-          --hidden-import=markdown.extensions.attr_list
-          --hidden-import=markdown.extensions.def_list
-          --hidden-import=pygments
-          --hidden-import=pygments.lexers
-          --hidden-import=pygments.lexers.python
-          --hidden-import=pygments.lexers.shell
-          --hidden-import=pygments.lexers.javascript
-          --hidden-import=pygments.lexers.data
-          --hidden-import=pygments.formatters
-          --hidden-import=pygments.formatters.html
-          --hidden-import=pygments.styles
-          --hidden-import=pygments.styles.friendly
-          --hidden-import=bcrypt
-          --clean --noconfirm
+          python -m nuitka
+          --onefile
+          --windows-console-mode=disable
+          --output-filename=doc-reader.exe
+          --output-dir=dist
+          --include-data-dir=templates=templates
+          --include-module=flask
+          --include-module=bcrypt
+          --include-module=markdown
+          --include-module=markdown.extensions.extra
+          --include-module=markdown.extensions.codehilite
+          --include-module=markdown.extensions.toc
+          --include-module=markdown.extensions.fenced_code
+          --include-module=markdown.extensions.tables
+          --include-module=markdown.extensions.footnotes
+          --include-module=markdown.extensions.attr_list
+          --include-module=markdown.extensions.def_list
+          --include-module=pygments
+          --include-module=pygments.lexers
+          --include-module=pygments.lexers.python
+          --include-module=pygments.lexers.shell
+          --include-module=pygments.lexers.javascript
+          --include-module=pygments.lexers.data
+          --include-module=pygments.formatters
+          --include-module=pygments.formatters.html
+          --include-module=pygments.styles
+          --include-module=pygments.styles.friendly
+          --assume-yes-for-downloads
           app.py
 
       # ── Upload artifact ───────────────────────────────────────────────────

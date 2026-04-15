@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>文档阅读器</title>
+  <title>创新树文档阅读器</title>
   <style>
     /* ── Reset ───────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -339,7 +339,7 @@
 <header class="hdr">
   <div class="hdr-logo">
     <span class="hdr-logo-icon">📚</span>
-    文档阅读器
+    创新树文档阅读器
   </div>
   <div class="hdr-breadcrumb" id="headerFile">
     <span>选择左侧文件开始阅读</span>
@@ -630,7 +630,7 @@ function esc(str) {
 
 // ── Shutdown ──────────────────────────────────────────────────────────────────
 async function shutdownApp() {
-  if (!confirm("确认关闭文档阅读器服务？\n关闭后需要重新启动程序才能使用。")) return;
+  if (!confirm("确认关闭创新树文档阅读器服务？\n关闭后需要重新启动程序才能使用。")) return;
   const btn = document.getElementById("btnStop");
   btn.textContent = "关闭中…";
   btn.disabled = true;

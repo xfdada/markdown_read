@@ -44,6 +44,8 @@ import secrets
 import webbrowser
 import threading
 import zlib
+import time
+from collections import OrderedDict
 from functools import wraps
 from pathlib import Path
 
@@ -182,12 +184,116 @@ def _safe_join(docs_dir: str, rel: str) -> str:
 _DOC_EXTS = {".md", ".mde"}
 
 
+# ── Cache layer ───────────────────────────────────────────────────────────────
+
+_CACHE_MAX = 512          # max rendered HTML pages kept in memory
+_cache_lock = threading.Lock()
+
+# LRU cache: key = full_path, value = (mtime, rendered_html)
+_doc_cache: "OrderedDict[str, tuple[float, str]]" = OrderedDict()
+
+# File-tree cache: (docs_dir, dir_mtime_sum) -> tree list
+_tree_cache: dict = {}   # {docs_dir: (mtime_signature, tree)}
+
+# Full-text index for search: {full_path: (mtime, raw_text)}
+_search_index: dict = {}  # built in background at startup
+_index_ready = False
+
+
+def _doc_mtime(full_path: str) -> float:
+    try:
+        return os.path.getmtime(full_path)
+    except OSError:
+        return 0.0
+
+
 def _read_doc(full_path: str) -> str:
-    """Read a document file, decompressing it if it has the .mde extension."""
+    """Read a document file, decompressing .mde in memory."""
     ext = os.path.splitext(full_path)[1].lower()
     if ext == ".mde":
         return zlib.decompress(Path(full_path).read_bytes()).decode("utf-8")
     return Path(full_path).read_text(encoding="utf-8")
+
+
+def _get_rendered(full_path: str) -> str:
+    """
+    Return rendered HTML for *full_path*.
+    Uses an LRU cache keyed by (path, mtime).
+    Cache entry is invalidated automatically when the file changes.
+    """
+    mtime = _doc_mtime(full_path)
+    with _cache_lock:
+        entry = _doc_cache.get(full_path)
+        if entry is not None and entry[0] == mtime:
+            # Cache hit — move to end (most-recently-used)
+            _doc_cache.move_to_end(full_path)
+            return entry[1]
+
+    # Cache miss — read + render outside the lock (can be slow)
+    html = _render_md(_read_doc(full_path))
+
+    with _cache_lock:
+        _doc_cache[full_path] = (mtime, html)
+        _doc_cache.move_to_end(full_path)
+        # Evict least-recently-used entries when over limit
+        while len(_doc_cache) > _CACHE_MAX:
+            _doc_cache.popitem(last=False)
+    return html
+
+
+def _dir_mtime_sig(docs_dir: str) -> float:
+    """Cheap signature: sum of mtime of every sub-directory (not files)."""
+    total = 0.0
+    try:
+        for root, dirs, _ in os.walk(docs_dir):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            total += os.path.getmtime(root)
+    except OSError:
+        pass
+    return total
+
+
+def _get_tree(docs_dir: str) -> list:
+    """Return file tree, rebuilding only when directory structure changes."""
+    sig = _dir_mtime_sig(docs_dir)
+    cached = _tree_cache.get(docs_dir)
+    if cached and cached[0] == sig:
+        return cached[1]
+    tree = _build_tree(docs_dir, docs_dir)
+    _tree_cache[docs_dir] = (sig, tree)
+    return tree
+
+
+def _get_doc_text(full_path: str) -> str:
+    """
+    Return raw text for *full_path*, using the search index when available.
+    Falls back to direct read if the index entry is stale or missing.
+    """
+    mtime = _doc_mtime(full_path)
+    entry = _search_index.get(full_path)
+    if entry and entry[0] == mtime:
+        return entry[1]
+    text = _read_doc(full_path)
+    _search_index[full_path] = (mtime, text)
+    return text
+
+
+def _build_search_index(docs_dir: str) -> None:
+    """Background thread: preload all documents into _search_index."""
+    global _index_ready
+    count = 0
+    for root, dirs, files in os.walk(docs_dir):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        for fname in sorted(files):
+            if os.path.splitext(fname)[1].lower() not in _DOC_EXTS:
+                continue
+            full = os.path.join(root, fname)
+            try:
+                _get_doc_text(full)   # populate index
+                count += 1
+            except Exception:
+                pass
+    _index_ready = True
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
@@ -243,7 +349,7 @@ def reader():
 @login_required
 def api_files():
     docs = get_docs_dir()
-    return jsonify(_build_tree(docs, docs))
+    return jsonify(_get_tree(docs))
 
 
 @app.route("/api/content")
@@ -260,10 +366,10 @@ def api_content():
     if not os.path.isfile(full) or os.path.splitext(full)[1].lower() not in _DOC_EXTS:
         abort(404)
     try:
-        raw = _read_doc(full)
-    except (ValueError, Exception):
+        html = _get_rendered(full)
+    except Exception:
         abort(500)
-    return jsonify({"html": _render_md(raw), "path": rel})
+    return jsonify({"html": html, "path": rel})
 
 
 @app.route("/api/search")
@@ -284,10 +390,10 @@ def api_search():
             full = os.path.join(root, fname)
             rel  = os.path.relpath(full, docs)
             try:
-                text = _read_doc(full)
+                text = _get_doc_text(full)   # uses in-memory index
             except Exception:
                 continue
-            display = os.path.splitext(fname)[0]   # strip .md / .mde
+            display = os.path.splitext(fname)[0]
             if q_lower not in text.lower() and q_lower not in display.lower():
                 continue
             snippets = [
@@ -349,5 +455,9 @@ if __name__ == "__main__":
         print(f"✓  文档目录: {docs}")
         print(f"✓  服务启动: {url}")
         print("   按 Ctrl+C 停止\n")
+        # Pre-warm search index in background so first search is instant
+        threading.Thread(
+            target=_build_search_index, args=(docs,), daemon=True, name="cache-warmer"
+        ).start()
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
         app.run(host="127.0.0.1", port=port, debug=False)

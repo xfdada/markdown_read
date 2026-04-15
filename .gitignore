@@ -13,6 +13,10 @@ wheels/
 # PyInstaller spec (auto-generated, not needed in VCS)
 *.spec
 
+# Large release archives — never commit these
+*.zip
+*.tar.gz
+
 # Runtime config — contains file_key + password_hash (secrets)
 # Use config.template.json as the committable version
 config.json

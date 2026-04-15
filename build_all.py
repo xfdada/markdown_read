@@ -198,6 +198,11 @@ def build_mac() -> bool:
     if os.path.exists(dst):
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
+    # Remove PyInstaller intermediate artifacts from dist/ root
+    shutil.rmtree(src, ignore_errors=True)
+    lone_bin = os.path.join(DIST, APP_NAME)
+    if os.path.exists(lone_bin):
+        os.remove(lone_bin)
     print(f"  ✓ dist/mac/{APP_NAME}.app")
     return True
 

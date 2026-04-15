@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文档阅读器</title>
+  <style>
+    /* ── Reset ───────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+    }
+
+    /* ── CSS Variables ───────────────────────────────────── */
+    :root {
+      --hdr: 52px;
+      --sb:  272px;
+      --sb-bg:    #13151f;
+      --sb-hover: #1e2133;
+      --sb-act:   #252a42;
+      --sb-text:  #8b93b8;
+      --sb-txt2:  #555a7a;
+      --accent:   #6680f5;
+      --border:   rgba(255,255,255,.06);
+      --content-bg: #ffffff;
+    }
+
+    /* ── Header ──────────────────────────────────────────── */
+    .hdr {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: var(--hdr);
+      background: #0d0f1a;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 16px;
+      z-index: 200;
+      gap: 12px;
+    }
+    .hdr-logo {
+      display: flex; align-items: center; gap: 8px;
+      color: #d0d4f0; font-weight: 600; font-size: 14px;
+      width: var(--sb); flex-shrink: 0;
+      padding-right: 12px;
+    }
+    .hdr-logo-icon { font-size: 20px; }
+    .hdr-breadcrumb {
+      flex: 1; color: var(--sb-text); font-size: 12px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .hdr-breadcrumb span { color: var(--sb-txt2); }
+    .hdr-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .btn {
+      padding: 5px 13px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--sb-text);
+      font-size: 12px; cursor: pointer;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+      transition: background .15s, color .15s;
+    }
+    .btn:hover { background: rgba(255,255,255,.1); color: #d0d4f0; }
+
+    /* ── Layout ──────────────────────────────────────────── */
+    .layout {
+      display: flex;
+      margin-top: var(--hdr);
+      height: calc(100vh - var(--hdr));
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    .sidebar {
+      width: var(--sb);
+      flex-shrink: 0;
+      background: var(--sb-bg);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Search bar */
+    .search-wrap {
+      padding: 10px 10px 8px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .search-row {
+      display: flex; align-items: center;
+      background: rgba(255,255,255,.05);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 0 10px; gap: 6px;
+      transition: border-color .2s;
+    }
+    .search-row:focus-within { border-color: var(--accent); }
+    .search-row svg { color: var(--sb-txt2); flex-shrink: 0; }
+    .search-input {
+      flex: 1; background: none; border: none; outline: none;
+      color: #c8cce8; font-size: 13px; padding: 8px 0;
+    }
+    .search-input::placeholder { color: var(--sb-txt2); }
+    .search-clear {
+      background: none; border: none; color: var(--sb-txt2);
+      cursor: pointer; font-size: 16px; line-height: 1;
+      padding: 2px; display: none;
+    }
+    .search-clear:hover { color: var(--sb-text); }
+
+    /* Tabs */
+    .tabs {
+      display: flex; flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      flex: 1; padding: 8px 4px; text-align: center;
+      font-size: 11px; font-weight: 500; letter-spacing: .4px;
+      color: var(--sb-txt2); cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+      text-transform: uppercase;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab:hover:not(.active) { color: var(--sb-text); }
+
+    /* Panels */
+    .panel {
+      flex: 1; overflow-y: auto; display: none;
+    }
+    .panel.active { display: block; }
+    .panel::-webkit-scrollbar { width: 4px; }
+    .panel::-webkit-scrollbar-track { background: transparent; }
+    .panel::-webkit-scrollbar-thumb { background: #2a2e44; border-radius: 2px; }
+
+    /* ── File Tree ───────────────────────────────────────── */
+    .tree-row {
+      display: flex; align-items: center; gap: 7px;
+      padding: 5px 12px; cursor: pointer;
+      color: var(--sb-text); font-size: 13px;
+      transition: background .12s;
+      white-space: nowrap; overflow: hidden;
+      user-select: none;
+    }
+    .tree-row:hover { background: var(--sb-hover); }
+    .tree-row.active { background: var(--sb-act); color: #e0e4ff; }
+    .tree-icon { flex-shrink: 0; font-size: 13px; }
+    .tree-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .tree-caret {
+      margin-left: auto; flex-shrink: 0;
+      color: var(--sb-txt2); font-size: 10px;
+      transition: transform .18s; display: inline-block;
+    }
+    .tree-caret.open { transform: rotate(90deg); }
+    .tree-children { display: none; padding-left: 14px; }
+    .tree-children.open { display: block; }
+    .tree-empty {
+      text-align: center; color: var(--sb-txt2);
+      font-size: 12px; padding: 28px 16px; line-height: 1.7;
+    }
+
+    /* ── Search Results ──────────────────────────────────── */
+    .result-item {
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background .12s;
+    }
+    .result-item:hover { background: var(--sb-hover); }
+    .result-hd {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 12px 3px;
+      color: var(--accent); font-size: 12px; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .result-snippet {
+      padding: 1px 12px 6px 30px;
+      color: var(--sb-txt2); font-size: 11px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .search-msg {
+      text-align: center; color: var(--sb-txt2);
+      font-size: 12px; padding: 28px 16px; line-height: 1.7;
+    }
+
+    /* ── TOC ─────────────────────────────────────────────── */
+    .toc-item {
+      display: block; padding: 4px 12px;
+      color: var(--sb-txt2); font-size: 12px;
+      text-decoration: none; cursor: pointer;
+      transition: color .12s;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .toc-item:hover { color: var(--accent); }
+    .toc-item.h1 { color: var(--sb-text); font-weight: 500; padding-left: 12px; }
+    .toc-item.h2 { padding-left: 20px; }
+    .toc-item.h3 { padding-left: 30px; font-size: 11px; }
+    .toc-item.h4 { padding-left: 38px; font-size: 11px; color: #3d4260; }
+    .toc-empty {
+      text-align: center; color: var(--sb-txt2);
+      font-size: 12px; padding: 28px 16px; line-height: 1.7;
+    }
+
+    /* ── Content Area ────────────────────────────────────── */
+    .content-area {
+      flex: 1; overflow-y: auto;
+      background: #f0f2f7;
+      scroll-behavior: smooth;
+    }
+    .content-area::-webkit-scrollbar { width: 6px; }
+    .content-area::-webkit-scrollbar-track { background: #e8eaf0; }
+    .content-area::-webkit-scrollbar-thumb { background: #c0c4d4; border-radius: 3px; }
+    .content-shell {
+      max-width: 900px; margin: 0 auto;
+      background: #fff; min-height: 100%;
+      padding: 48px 64px 80px;
+      box-shadow: 0 0 0 1px #dde1ea, 0 2px 16px rgba(0,0,0,.04);
+    }
+
+    /* Welcome screen */
+    .welcome {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: calc(100vh - var(--hdr));
+      color: #b0b8d0; text-align: center;
+    }
+    .welcome-icon { font-size: 72px; opacity: .3; margin-bottom: 20px; }
+    .welcome h2 { font-size: 18px; color: #9098b8; margin-bottom: 6px; }
+    .welcome p { font-size: 13px; }
+
+    /* ── Markdown Body ───────────────────────────────────── */
+    .md-body {
+      color: #1f2328;
+      font-size: 15px;
+      line-height: 1.75;
+    }
+    .md-body h1, .md-body h2, .md-body h3,
+    .md-body h4, .md-body h5, .md-body h6 {
+      margin: 1.6em 0 .5em;
+      font-weight: 600;
+      line-height: 1.3;
+      color: #111827;
+    }
+    .md-body h1 { font-size: 2em; border-bottom: 1px solid #e5e7eb; padding-bottom: .3em; margin-top: 0; }
+    .md-body h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: .3em; }
+    .md-body h3 { font-size: 1.25em; }
+    .md-body h4 { font-size: 1em; }
+    .md-body p { margin: .8em 0; }
+    .md-body ul, .md-body ol { padding-left: 2em; margin: .8em 0; }
+    .md-body li { margin: .3em 0; }
+    .md-body li > p { margin: .2em 0; }
+    .md-body blockquote {
+      margin: 1em 0;
+      padding: .5em 1em;
+      border-left: 4px solid #d1d5db;
+      color: #6b7280;
+      background: #f9fafb;
+      border-radius: 0 4px 4px 0;
+    }
+    .md-body code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: .875em;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: .15em .4em;
+      color: #d63384;
+    }
+    .md-body pre {
+      background: #f8f9fb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 1.2em 0;
+      position: relative;
+    }
+    .md-body pre code {
+      background: none; border: none;
+      padding: 0; color: inherit;
+      font-size: 13px; line-height: 1.55;
+    }
+    /* Pygments highlight wrapper */
+    .md-body .highlight {
+      background: #f8f9fb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 1.2em 0;
+      position: relative;
+    }
+    .md-body .highlight pre {
+      background: none; border: none;
+      border-radius: 0; margin: 0;
+      padding: 16px;
+    }
+    .md-body table {
+      border-collapse: collapse;
+      width: 100%; margin: 1.2em 0; font-size: 14px;
+    }
+    .md-body th, .md-body td {
+      border: 1px solid #e5e7eb;
+      padding: 8px 14px; text-align: left;
+    }
+    .md-body th { background: #f9fafb; font-weight: 600; }
+    .md-body tr:nth-child(even) td { background: #fbfcfd; }
+    .md-body a { color: #2563eb; text-decoration: none; }
+    .md-body a:hover { text-decoration: underline; }
+    .md-body img { max-width: 100%; border-radius: 6px; }
+    .md-body hr { border: none; border-top: 1px solid #e5e7eb; margin: 2em 0; }
+
+    /* Copy button */
+    .copy-btn {
+      position: absolute; top: 8px; right: 8px;
+      padding: 3px 9px;
+      background: rgba(255,255,255,.85);
+      border: 1px solid #d1d5db;
+      border-radius: 5px;
+      font-size: 11px; cursor: pointer; color: #555;
+      opacity: 0; transition: opacity .15s;
+    }
+    .md-body .highlight:hover .copy-btn,
+    .md-body pre:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { background: #fff; color: #111; }
+
+    /* Loading / error state */
+    .status-msg {
+      text-align: center; color: #9ca3af;
+      padding: 60px 24px; font-size: 14px;
+    }
+
+    /* ── Pygments CSS ─────────────────────────────────────── */
+    {{ pygments_css | safe }}
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="hdr">
+  <div class="hdr-logo">
+    <span class="hdr-logo-icon">📚</span>
+    文档阅读器
+  </div>
+  <div class="hdr-breadcrumb" id="headerFile">
+    <span>选择左侧文件开始阅读</span>
+  </div>
+  <div class="hdr-actions">
+    <button class="btn" id="btnStop" onclick="shutdownApp()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+      关闭服务
+    </button>
+    <a href="/logout" class="btn">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      退出
+    </a>
+  </div>
+</header>
+
+<!-- Main layout -->
+<div class="layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <nav class="sidebar">
+    <!-- Search -->
+    <div class="search-wrap">
+      <div class="search-row">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input class="search-input" id="searchInput" type="text"
+               placeholder="搜索文档…" autocomplete="off" spellcheck="false">
+        <button class="search-clear" id="searchClear" title="清除">✕</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" data-tab="files">文件</div>
+      <div class="tab" data-tab="toc">目录</div>
+    </div>
+
+    <!-- Files / Search results panel -->
+    <div class="panel active" id="panel-files">
+      <div id="fileTree"></div>
+    </div>
+
+    <!-- TOC panel -->
+    <div class="panel" id="panel-toc">
+      <div id="tocList">
+        <div class="toc-empty">打开文档后<br>自动生成目录</div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Content ───────────────────────────────────────────── -->
+  <main class="content-area" id="contentArea">
+    <div class="welcome">
+      <div class="welcome-icon">📖</div>
+      <h2>选择文档开始阅读</h2>
+      <p>从左侧文件树中选择一个 Markdown 文件</p>
+    </div>
+  </main>
+
+</div>
+
+<script>
+"use strict";
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentPath = null;
+let searchTimer = null;
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => activateTab(tab.dataset.tab));
+});
+
+function activateTab(name) {
+  document.querySelectorAll(".tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(".panel").forEach(p =>
+    p.classList.toggle("active", p.id === "panel-" + name));
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+const searchInput = document.getElementById("searchInput");
+const searchClear  = document.getElementById("searchClear");
+
+searchInput.addEventListener("input", () => {
+  const q = searchInput.value.trim();
+  searchClear.style.display = q ? "block" : "none";
+  clearTimeout(searchTimer);
+  if (q.length >= 2) {
+    searchTimer = setTimeout(() => doSearch(q), 280);
+  } else {
+    loadFileTree();
+  }
+});
+
+searchClear.addEventListener("click", () => {
+  searchInput.value = "";
+  searchClear.style.display = "none";
+  loadFileTree();
+});
+
+async function doSearch(q) {
+  activateTab("files");
+  document.getElementById("fileTree").innerHTML =
+    '<div class="search-msg">搜索中…</div>';
+  const res  = await fetch("/api/search?q=" + encodeURIComponent(q));
+  const data = await res.json();
+  renderSearchResults(data);
+}
+
+function renderSearchResults(results) {
+  const el = document.getElementById("fileTree");
+  if (!results.length) {
+    el.innerHTML = '<div class="search-msg">未找到匹配的文档</div>';
+    return;
+  }
+  el.innerHTML = results.map(r => {
+    const snippets = r.snippets.map(s =>
+      `<div class="result-snippet">${esc(s)}</div>`).join("");
+    return `<div class="result-item" data-file-path="${esc(r.path)}">
+      <div class="result-hd">📄 ${esc(r.display || r.name)}</div>
+      ${snippets}
+    </div>`;
+  }).join("");
+}
+
+// ── File Tree ─────────────────────────────────────────────────────────────────
+async function loadFileTree() {
+  document.getElementById("fileTree").innerHTML =
+    '<div class="search-msg">加载中…</div>';
+  const res  = await fetch("/api/files");
+  const data = await res.json();
+  renderTree(data);
+}
+
+function renderTree(items) {
+  const el = document.getElementById("fileTree");
+  if (!items.length) {
+    el.innerHTML = '<div class="tree-empty">目录中暂无 Markdown 文件</div>';
+    return;
+  }
+  el.innerHTML = buildTreeHtml(items, 0);
+  // Expand top-level dirs by default
+  el.querySelectorAll(".tree-children").forEach((ch, i) => {
+    if (i === 0) { ch.classList.add("open"); }
+  });
+  el.querySelectorAll(".tree-caret").forEach((c, i) => {
+    if (i === 0) { c.classList.add("open"); }
+  });
+}
+
+function buildTreeHtml(items) {
+  return items.map(item => {
+    if (item.type === "dir") {
+      return `<div class="tree-item">
+        <div class="tree-row dir-row" data-dir>
+          <span class="tree-icon">📁</span>
+          <span class="tree-name">${esc(item.name)}</span>
+          <span class="tree-caret">▶</span>
+        </div>
+        <div class="tree-children">${buildTreeHtml(item.children)}</div>
+      </div>`;
+    } else {
+      return `<div class="tree-item">
+        <div class="tree-row file-row" data-file-path="${esc(item.path)}">
+          <span class="tree-icon">📄</span>
+          <span class="tree-name">${esc(item.display || item.name)}</span>
+        </div>
+      </div>`;
+    }
+  }).join("");
+}
+
+// ── Event delegation for tree & search clicks ─────────────────────────────────
+document.getElementById("fileTree").addEventListener("click", e => {
+  // Directory toggle
+  const dirRow = e.target.closest(".dir-row");
+  if (dirRow) {
+    const children = dirRow.nextElementSibling;
+    const caret    = dirRow.querySelector(".tree-caret");
+    children && children.classList.toggle("open");
+    caret    && caret.classList.toggle("open");
+    return;
+  }
+  // File open
+  const row = e.target.closest("[data-file-path]");
+  if (row) loadFile(row.dataset.filePath);
+});
+
+// ── Load & render a file ──────────────────────────────────────────────────────
+async function loadFile(path) {
+  currentPath = path;
+
+  // Highlight active file
+  document.querySelectorAll(".file-row").forEach(r =>
+    r.classList.toggle("active", r.dataset.filePath === path));
+
+  // Update breadcrumb
+  document.getElementById("headerFile").textContent = path;
+
+  // Loading placeholder
+  document.getElementById("contentArea").innerHTML =
+    '<div class="content-shell"><div class="status-msg">加载中…</div></div>';
+
+  const res = await fetch("/api/content?path=" + encodeURIComponent(path));
+  if (!res.ok) {
+    document.getElementById("contentArea").innerHTML =
+      '<div class="content-shell"><div class="status-msg">加载失败，请检查文件是否存在</div></div>';
+    return;
+  }
+
+  const data = await res.json();
+  renderContent(data.html);
+}
+
+function renderContent(html) {
+  const area = document.getElementById("contentArea");
+  area.innerHTML = `<div class="content-shell"><div class="md-body">${html}</div></div>`;
+
+  // Add copy buttons to every code block
+  area.querySelectorAll(".highlight, pre").forEach(block => {
+    const code = block.querySelector("code");
+    if (!code) return;
+    block.style.position = "relative";
+    const btn = document.createElement("button");
+    btn.className = "copy-btn";
+    btn.textContent = "复制";
+    btn.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(code.innerText);
+      btn.textContent = "已复制!";
+      setTimeout(() => { btn.textContent = "复制"; }, 1800);
+    });
+    block.appendChild(btn);
+  });
+
+  buildToc();
+  area.scrollTop = 0;
+}
+
+// ── TOC ───────────────────────────────────────────────────────────────────────
+function buildToc() {
+  const headings = document.querySelectorAll(".md-body h1, .md-body h2, .md-body h3, .md-body h4");
+  const tocEl    = document.getElementById("tocList");
+
+  if (!headings.length) {
+    tocEl.innerHTML = '<div class="toc-empty">此文档无标题结构</div>';
+    return;
+  }
+
+  tocEl.innerHTML = Array.from(headings).map(h => {
+    const level = h.tagName.toLowerCase();
+    return `<div class="toc-item ${level}" data-toc-id="${esc(h.id)}">${esc(h.textContent)}</div>`;
+  }).join("");
+}
+
+document.getElementById("tocList").addEventListener("click", e => {
+  const item = e.target.closest(".toc-item");
+  if (!item) return;
+  const id = item.dataset.tocId;
+  const el = id && document.getElementById(id);
+  if (el) {
+    const area    = document.getElementById("contentArea");
+    const areaTop = area.getBoundingClientRect().top;
+    const elTop   = el.getBoundingClientRect().top;
+    area.scrollTop += (elTop - areaTop) - 20;
+  }
+});
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// ── Shutdown ──────────────────────────────────────────────────────────────────
+async function shutdownApp() {
+  if (!confirm("确认关闭文档阅读器服务？\n关闭后需要重新启动程序才能使用。")) return;
+  const btn = document.getElementById("btnStop");
+  btn.textContent = "关闭中…";
+  btn.disabled = true;
+  try {
+    await fetch("/api/shutdown", { method: "POST" });
+  } catch (_) { /* server already stopped — fetch throws, that's fine */ }
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;
+                height:100vh;background:#0f1117;color:#8b93b8;
+                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+      <div style="text-align:center">
+        <div style="font-size:56px;margin-bottom:20px;opacity:.5">⏹</div>
+        <h2 style="color:#d0d4f0;margin-bottom:8px">服务已关闭</h2>
+        <p style="font-size:13px">可以关闭此标签页</p>
+      </div>
+    </div>`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadFileTree();
+</script>
+</body>
+</html>

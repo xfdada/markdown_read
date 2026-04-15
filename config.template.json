@@ -1,0 +1,5 @@
+{
+  "password": "changeme",
+  "port": 5000,
+  "docs_dir": "./document"
+}

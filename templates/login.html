@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 · 文档阅读器</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Subtle grid background */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    .card {
+      position: relative;
+      background: #1a1d2e;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 16px;
+      padding: 44px 40px;
+      width: 380px;
+      box-shadow: 0 24px 64px rgba(0,0,0,.6);
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .logo-icon {
+      font-size: 52px;
+      display: block;
+      margin-bottom: 14px;
+      line-height: 1;
+    }
+    .logo h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #e8eaf6;
+      letter-spacing: .3px;
+    }
+    .logo p {
+      color: #555a7a;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #6b7194;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      margin-bottom: 8px;
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+    .input-wrap svg {
+      position: absolute;
+      left: 13px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #444766;
+      width: 16px;
+      height: 16px;
+      pointer-events: none;
+    }
+    input[type="password"] {
+      width: 100%;
+      padding: 11px 14px 11px 40px;
+      background: rgba(255,255,255,.04);
+      border: 1.5px solid rgba(255,255,255,.08);
+      border-radius: 9px;
+      color: #e8eaf6;
+      font-size: 15px;
+      outline: none;
+      transition: border-color .2s, background .2s;
+    }
+    input[type="password"]::placeholder { color: #3d4060; }
+    input[type="password"]:focus {
+      border-color: #5b77f5;
+      background: rgba(91,119,245,.06);
+    }
+
+    .error {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.25);
+      border-radius: 8px;
+      color: #f87171;
+      font-size: 13px;
+      padding: 9px 12px;
+      margin-top: 12px;
+    }
+
+    button[type="submit"] {
+      width: 100%;
+      margin-top: 22px;
+      padding: 12px;
+      background: linear-gradient(135deg, #5b77f5, #7c5cbf);
+      border: none;
+      border-radius: 9px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: .3px;
+      transition: opacity .2s, transform .1s;
+      box-shadow: 0 4px 20px rgba(91,119,245,.35);
+    }
+    button[type="submit"]:hover { opacity: .92; }
+    button[type="submit"]:active { transform: scale(.98); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <span class="logo-icon">📚</span>
+      <h1>文档阅读器</h1>
+      <p>请输入访问密码以继续</p>
+    </div>
+
+    <form method="post" autocomplete="off">
+      <label for="password">访问密码</label>
+      <div class="input-wrap">
+        <!-- lock icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <input type="password" id="password" name="password"
+               placeholder="请输入密码" autofocus required>
+      </div>
+
+      {% if error %}
+        <div class="error">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          {{ error }}
+        </div>
+      {% endif %}
+
+      <button type="submit">确认登录</button>
+    </form>
+  </div>
+</body>
+</html>

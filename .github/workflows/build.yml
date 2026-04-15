@@ -1,0 +1,68 @@
+name: Build Windows EXE
+
+# Trigger: manually click "Run workflow"  OR  push a version tag
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-windows:
+    name: Build Windows (doc-reader.exe)
+    runs-on: windows-latest
+
+    steps:
+      # ── Checkout source (no document data needed) ─────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Python ────────────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── Install runtime deps + PyInstaller ────────────────────────────────
+      - name: Install dependencies
+        run: |
+          pip install flask bcrypt markdown Pygments pyinstaller
+
+      # ── Build .exe ────────────────────────────────────────────────────────
+      - name: Build with PyInstaller
+        run: >
+          pyinstaller
+          --onefile --noconsole
+          --name=doc-reader
+          "--add-data=templates;templates"
+          --hidden-import=markdown.extensions.extra
+          --hidden-import=markdown.extensions.codehilite
+          --hidden-import=markdown.extensions.toc
+          --hidden-import=markdown.extensions.fenced_code
+          --hidden-import=markdown.extensions.tables
+          --hidden-import=markdown.extensions.footnotes
+          --hidden-import=markdown.extensions.attr_list
+          --hidden-import=markdown.extensions.def_list
+          --hidden-import=pygments
+          --hidden-import=pygments.lexers
+          --hidden-import=pygments.lexers.python
+          --hidden-import=pygments.lexers.shell
+          --hidden-import=pygments.lexers.javascript
+          --hidden-import=pygments.lexers.data
+          --hidden-import=pygments.formatters
+          --hidden-import=pygments.formatters.html
+          --hidden-import=pygments.styles
+          --hidden-import=pygments.styles.friendly
+          --hidden-import=bcrypt
+          --clean --noconfirm
+          app.py
+
+      # ── Upload artifact ───────────────────────────────────────────────────
+      - name: Upload doc-reader.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc-reader-windows
+          path: dist/doc-reader.exe
+          retention-days: 30
+
+            > `config.json` 和 `document/` 需自行从本地 `dist/` 目录复制，不包含在此 Release 中（含加密密钥）。
